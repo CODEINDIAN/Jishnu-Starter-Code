@@ -1,1 +1,1038 @@
 
+# Utility Methods
+
+
+
+def conv_(s):
+    try:
+        float(s)
+        return True
+    except:
+        return False
+
+def get_uneven_values(series_):
+    unique_uneven_series=series_[ series_.apply(conv_)== False].unique()
+    data_dict={
+        "Uneven_Values":unique_uneven_series,
+        "Assign_Values":unique_uneven_series,
+    }
+    df=pd.DataFrame(data_dict)
+    df["Convertable"]=False
+    return df
+
+
+import string
+def remove_white_space(string_):
+    return string_.translate(str.maketrans("", "", string.whitespace))
+
+def remove_first_dot(string):
+    if string[0]==".":
+        return string[1:]
+    return string
+
+def remove_last_dot(string):
+    if string[-1]==".":
+        return string[:-1]
+    return string
+def remove_alpha_bet(string_):
+    return ''.join(filter(lambda x : ((x==" ") or (not x.isalpha())),string_))
+
+def remove_repeated_character(string_,char__):
+    return ''.join(filter(lambda x : (x!=char__),string_))
+
+
+
+def assign_map(DataFrame_,uneven,assign,dict_):
+    DataFrame=DataFrame_.copy()
+    series_=DataFrame[assign]
+    series_=series_.map(dict_,na_action="ignore")
+    series_=pd.Series(np.where(series_.isna(),DataFrame[assign],series_))
+    series_=pd.Series(np.where(series_=="null",np.nan,series_))
+#     print(series_)
+    DataFrame[assign]=series_
+    return DataFrame
+
+
+def alter_string(s,chars_=":/"):
+#     Remove All Alphabets
+    s=remove_alpha_bet(s)
+    
+# Replace double dot with  single dot 
+    s=s.replace("..",'.')
+    
+# Replace hypen with single dor
+    s=s.replace("-",'.')
+    
+    s=remove_repeated_character(s,"?")
+# Remove all the chats
+    for char_ in chars_:
+        s=s.replace(char_,"")
+# Remove White space
+    s=remove_white_space(s)
+    try:
+        s=remove_first_dot(s)
+    
+        s=remove_last_dot(s)
+    except: pass
+    return s
+
+
+
+
+
+
+
+
+
+
+column_name="LYMPHCYT"
+
+
+
+unique__uv=get_uneven_values(medical_data[column_name])
+unique__uv
+
+unique__uv["Assign_Values"]=unique__uv["Assign_Values"].apply(alter_string)
+
+unique__uv["Convertable"]=unique__uv["Assign_Values"].apply(conv_)
+
+
+unique__uv[~ unique__uv["Convertable"]]
+
+
+
+
+dict_={
+    "":"null",
+    "0.04.7":"4.7",
+    "5;3":"5.3",
+    "%":"null",
+    "3.+5":"3.5",
+    "642022000":"null",
+    "5M/CUMM":"null"
+    
+}
+
+
+
+unique__uv=assign_map(unique__uv,"Uneven_Values","Assign_Values",dict_)
+unique__uv
+
+
+uneven_cols=[column_name]
+uneven_values=[list(unique__uv["Uneven_Values"])]
+assign_values=[list(unique__uv["Assign_Values"])]
+
+assign_missing_values(medical_data,uneven_cols,uneven_values,assign_values)
+
+
+
+
+
+import pandas as pd
+import numpy as np 
+from optbinning import OptimalBinning 
+"""
+
+These functions to be used for data processing.
+
+"""
+
+def settle_decline(in_str):
+    if in_str in ['Settled','Settled with ROP','Settled not paid',                  
+                    'Settled- Exgratia', 'Settled not paid with ROP','settled not paid']:
+        return "settled"
+    
+    else:
+        return "declined"
+
+
+def target_flag(row):
+    
+    if (row['date of Loss'] >= row["pdate_start"] ) &  (row['date of Loss'] <= row["pdate_end"] ):
+        
+        return "T-YES"
+    else:
+        return "T-NOT"
+    
+
+def target_flag_12(row):
+    
+    if (row['date of Loss'] >= row["pdate_start"] ) &  (row['date of Loss'] <= row["pdate_end"] ):
+        
+        return "T-YES"
+    else:
+        return "T-NOT"
+    
+
+
+def claim_group(row):   
+    
+    res="NATURAL"
+    
+    if row['status_flag_d']=='settled':
+        
+        if row['Cause of Loss'] in [
+             'Motor Vehicle Accidents',
+             'Suicide and Self Inflicting Injury',
+             'Accidental Falls',
+             'Accidents Mainly of Industrial Type',
+             'Other Transport Accidents',
+             'Injury Undetermined Whether Accidentally or Purposefully Inflicted',
+             'Homicide and Injury Purposefully Inflicted by Other Persons; Legal Intervention',
+             'Snake Bite:70',
+             'All Other Accidents - Earthquake  etc.',
+             'Accidental Poisoning',
+             'Anthrax',
+             'Accidents Caused By Fire',
+             'Electric Shock:59',
+             'Motor Vehicle Accidents:NA', 
+             'Injury Undetermined Whether Accidentally or Purposefully Inflicted',            
+             'Accidental Drowning and Submersions']:
+            res ="UN-NATURAL"
+            
+    elif  row['status_flag_d']=='declined':    
+        
+        if row['Decline reason'].strip() in ['Non Disclosure', 'Non-Disclosure','Non disclosure',
+                                    'Non Dislcosure','Misrepresentation of material financial information.',
+                                    'void'
+                                    ]:
+            
+            res ="NATURAL-NON-DISCLOSE"
+        
+        elif row['Decline reason'] in ['Fraud','Insurance fraud;Non disclosure of previous policies and impersonation']:
+            
+            res ="FRAUD"
+             
+        elif   row['Decline reason'] in ['Lapsed','Void']:
+             res ="LAPSED"
+
+    return res     
+
+            
+
+    
+"""
+
+These functions to be used for feature engineering purpose
+
+"""    
+
+def edu_band(x):
+    if x =='< Graduate':
+        return 0 
+    elif x =='Graduate':
+        return 1
+    elif x =='> Graduate':
+        return 2
+    else:
+        return 999  
+
+def emp_band(x):
+    if x =='Self_employed':
+        return 0 
+    elif x =='Salaried':
+        return 1    
+    else:
+        return 999  
+
+def ratio_income_premium(row):
+    
+    row['total_premium'] =row['ANNUAL_PREMIUM'] * row['PREM_TERM_Y_CORR']
+    try:
+        own_income_prem_ratio =round(row['OWNER_ANNUAL_INCOME'] / row['total_premium'],3)
+    except:
+        own_income_prem_ratio =-999
+    return own_income_prem_ratio
+
+def age_ins_loc(row,idx=3):
+    
+    x = row['Agent Zip code'].strip()
+    y = row['INS ZIPCODE-permanent'].strip()
+    
+    if x=='':
+        return 998
+    elif y=='':
+        return 999
+    elif x!='' and  y!='':
+        if x[0:idx]==y[0:idx]:
+            return 1
+        else:
+            return 0 
+    else:
+        return 997
+
+def ans_flag_map(x):
+    if x=="Y":
+        return 1
+    elif x=="N":
+        return 2
+    else:
+        return 3
+    
+def count_cs_ratio(row):
+    if row['SC_BR'] == 0:
+        return -999
+    else:
+        return round(row['CC_BR']/row['SC_BR'],2)
+    
+def amt_cs_ratio(row):
+    if row['SSA_BR'] == 0:
+        return -999
+    else:
+        return round(row['CSA_BR']/row['SSA_BR'],2)   
+    
+def amt_cs_ratio_plan(row):
+    if row['SSA_PLAN'] == 0:
+        return -999
+    else:
+        return round(row['CSA_PLAN']/row['SSA_PLAN'],2)       
+
+#######################
+# count branch
+
+def  ratio_claim_mod_count_br(row):
+    if row['SC_BR_MOD'] == 0.0:
+        return -999
+    else:
+        return round(row['CC_BR_MOD']/row['SC_BR_MOD'],2)
+
+def  ratio_decline_count_br(row):
+    if row['SC_BR_MOD'] == 0.0:
+        return -999
+    else:
+        return round(row['DL_CN_BR']/row['SC_BR_MOD'],2)        
+
+def  ratio_claim_decline_count_br(row):
+    if row['SC_BR_MOD'] == 0.0:
+        return -999    
+    else:           
+        return round(row['DEC_CL_COUNT_BR']/row['SC_BR_MOD'],2)
+
+# amount branch
+
+def  ratio_claim_mod_amt_br(row):
+    if row['SSA_BR_MOD'] == 0.0:
+        return -999
+    else:
+        return round(row['CSA_BR_MOD']/row['SSA_BR_MOD'],2)
+
+
+def  ratio_decline_amt_br(row):
+    if row['SC_BR_MOD'] == 0.0:
+        return -999
+    else:
+        return round(row['DL_SA_BR']/row['SC_BR_MOD'],2)        
+
+def  ratio_claim_decline_amt_br(row):
+    if row['SC_BR_MOD'] == 0.0:
+        return -999
+    else:
+        return round(row['DEC_CL_AMT_BR']/row['SC_BR_MOD'],2)
+
+# count  plan
+
+def  ratio_claim_mod_count_pc(row):
+    if row['SC_PC_MOD'] == 0.0:
+        return -999
+    else:
+        return round(row['CC_PLAN_MOD']/row['SC_PC_MOD'],2)
+
+
+def  ratio_decline_count_pc(row):
+    if row['SC_PC_MOD'] == 0.0:
+        return -999
+    else:
+        return round(row['DL_CN_PC']/row['SC_PC_MOD'],2)       
+
+def  ratio_claim_decline_count_pc(row):
+    if row['SC_PC_MOD'] == 0.0:
+        return -999
+    else:
+        return round(row['DEC_CL_COUNT_PC']/row['SC_PC_MOD'],2)
+
+####  amt pc 
+
+def  ratio_claim_mod_amt_pc(row):
+    if row['SSA_PC_MOD'] == 0.0:
+        return -999
+    else:
+        return round(row['CSA_PLAN_MOD']/row['SSA_PC_MOD'],2)
+
+
+def  ratio_decline_amt_pc(row):
+    if row['SSA_PC_MOD'] == 0.0:
+        return -999
+    else:
+        return round(row['DL_SA_PC']/row['SSA_PC_MOD'],2)        
+
+def  ratio_claim_decline_amt_pc(row):
+    if row['SSA_PC_MOD'] == 0.0:
+        return -999
+    else:
+        return round(row['DEC_CL_AMT_PC']/row['SSA_PC_MOD'],2)
+
+######################################
+
+
+
+
+
+def opt_num_bins(data, mvar="AGE"):
+    optb =OptimalBinning(name=mvar,dtype='numerical', solver="cp",monotonic_trend="auto_asc_desc")
+    optb.fit(data[mvar],data['NTARGET'])
+    var_woe = optb.transform(data[mvar],metric="woe")
+    new_var =mvar+'_BAND_LC'
+    print(new_var)
+    data[new_var]=var_woe
+    return data
+
+def opt_cat_bins(data, mvar="AGE",cat_percent=0.05):
+    #optb =OptimalBinning(name=mvar,dtype='numerical', solver="cp")
+    optb =OptimalBinning(name=mvar,dtype='categorical', solver="mip", cat_cutoff=cat_percent)
+    optb.fit(data[mvar],data['NTARGET'])
+    var_woe = optb.transform(data[mvar],metric="woe")
+    new_var =mvar+'_BAND_LC'
+    print(new_var)
+    data[new_var]=var_woe
+    return data
+
+def opt_num_bins_fraud(data, mvar="AGE",ktarget='NTARGET'):
+    optb =OptimalBinning(name=mvar,dtype='numerical', solver="cp",monotonic_trend="auto_asc_desc")
+    optb.fit(data[mvar],data[ktarget])
+    var_woe = optb.transform(data[mvar],metric="woe")
+    new_var =mvar+'_BAND_LC'
+    print(new_var)
+    data[new_var]=var_woe
+    return data
+
+def opt_cat_bins_fruad(data, mvar="AGE",cat_percent=0.05,ktarget='NTARGET'):
+    #optb =OptimalBinning(name=mvar,dtype='numerical', solver="cp")
+    optb =OptimalBinning(name=mvar,dtype='categorical', solver="mip", cat_cutoff=cat_percent)
+    optb.fit(data[mvar],data[ktarget])
+    var_woe = optb.transform(data[mvar],metric="woe")
+    new_var =mvar+'_BAND_LC'
+    print(new_var)
+    data[new_var]=var_woe
+    return data
+
+"""
+
+These functions to be used for feature modeling  purpose
+
+"""    
+def ks_base_forced(y,y_proba_list, groups=20):
+
+    data = pd.DataFrame()
+
+    data['target'] =y
+    data['prob'] =y_proba_list
+
+    data['target0'] = 1 - data['target'] 
+    
+    data['bucket'] = pd.qcut(data['prob'].rank(method='first'),groups,labels=False)
+    #data['bucket'] = pd.qcut(data['prob'],duplicates='drop',groups,labels=False)
+    
+    bucket_groups = len(pd.unique(data['bucket']))
+    
+    
+    grouped = data.groupby('bucket',as_index = False)
+
+    kstable = pd.DataFrame()
+    kstable['min_prob'] = grouped.min()['prob']
+    kstable['max_prob'] = grouped.max()['prob']
+    kstable['events']   = grouped.sum()['target']
+    kstable['nonevents'] = grouped.sum()['target0']
+
+    kstable = kstable.sort_values(by="min_prob", ascending=False).reset_index(drop = True)
+    
+    kstable['total_obs'] =kstable['events'] +kstable['nonevents']
+
+    kstable['event_rate'] = list(map(lambda x,y : x/(x+y),kstable['events'],kstable['nonevents']))
+    kstable['nonevent_rate'] = list(map(lambda x,y : y/(x+y),kstable['events'],kstable['nonevents']))
+    
+    kstable['%event'] = (kstable.events / data['target'].sum()) 
+    kstable['%nonevent'] = (kstable.nonevents / data['target0'].sum())
+    kstable['%total_obs'] = kstable['total_obs'].map(lambda x: round(x/kstable['total_obs'].sum(),3))
+    
+    kstable['cum_event']= (kstable.events).cumsum()
+    kstable['cum_nonevent']=(kstable.nonevents).cumsum()
+    kstable['cum_totalobs']=(kstable.total_obs).cumsum()
+
+    kstable['cum_event_rate'] = list(map(lambda x,y : x/(x+y),kstable['cum_event'],kstable['cum_nonevent']))
+
+    # kstable['total_obs'].sum()
+    kstable['%cum_event']=(kstable.events / data['target'].sum()).cumsum()
+    kstable['%cum_nonevent']=(kstable.nonevents  / data['target0'].sum()).cumsum()
+    kstable['%cum_totalobs']=round(kstable['cum_totalobs']/kstable['total_obs'].sum(),3)
+
+    kstable['KS'] = np.round(kstable['%cum_event']-kstable['%cum_nonevent'], 3) * 100
+
+    
+    kstable.index = range(1,bucket_groups+1) 
+    kstable.index.rename('Decile', inplace=True)
+
+    kstable['true_pos'] = kstable['cum_event']
+    kstable['false_pos'] = kstable['cum_nonevent']
+
+    kstable['true_neg'] = list(map(lambda x : (kstable['nonevents'].sum())-x,kstable['false_pos']))
+    kstable['false_neg'] = list(map(lambda x : (kstable['events'].sum())-x,kstable['true_pos']))
+    kstable['Precision'] = list(map(lambda x,y : x/(x+y),kstable['true_pos'],kstable['false_pos']))
+    kstable['Recall'] = list(map(lambda x,y : x/(x+y),kstable['true_pos'],kstable['false_neg']))
+    
+    sample_rate = round(kstable['events'].sum() / kstable['total_obs'].sum(),6)
+    print(sample_rate)
+    kstable['lift'] = round(kstable['cum_event_rate']/sample_rate,2)
+
+    print(kstable.head(2))
+
+    
+    ks =  round(max(kstable['KS']),2)
+
+    print(" \n KS is " + str(ks)+"%"+ " at decile " +  str((kstable.index[kstable['KS']==max(kstable['KS'])][0])))
+
+    return (kstable)
+
+def ks_base_normal(y,y_proba_list, groups=20):
+
+    data = pd.DataFrame()
+
+    data['target'] =y
+    data['prob'] =y_proba_list
+
+    data['target0'] = 1 - data['target'] 
+    
+    #data['bucket'] = pd.qcut(data['prob'].rank(method='first'),groups)
+    data['bucket'] = pd.qcut(data['prob'],groups,duplicates='drop',labels=False)
+    
+    bucket_groups = len(pd.unique(data['bucket']))
+    
+    
+    grouped = data.groupby('bucket',as_index = False)
+
+    kstable = pd.DataFrame()
+    kstable['min_prob'] = grouped.min()['prob']
+    kstable['max_prob'] = grouped.max()['prob']
+    kstable['events']   = grouped.sum()['target']
+    kstable['nonevents'] = grouped.sum()['target0']
+
+    kstable = kstable.sort_values(by="min_prob", ascending=False).reset_index(drop = True)
+    
+    kstable['total_obs'] =kstable['events'] +kstable['nonevents']
+
+    kstable['event_rate'] = list(map(lambda x,y : x/(x+y),kstable['events'],kstable['nonevents']))
+    kstable['nonevent_rate'] = list(map(lambda x,y : y/(x+y),kstable['events'],kstable['nonevents']))
+    
+    kstable['%event'] = (kstable.events / data['target'].sum()) 
+    kstable['%nonevent'] = (kstable.nonevents / data['target0'].sum())
+    kstable['%total_obs'] = kstable['total_obs'].map(lambda x: round(x/kstable['total_obs'].sum(),3))
+    
+    kstable['cum_event']= (kstable.events).cumsum()
+    kstable['cum_nonevent']=(kstable.nonevents).cumsum()
+    kstable['cum_totalobs']=(kstable.total_obs).cumsum()
+
+    kstable['cum_event_rate'] = list(map(lambda x,y : x/(x+y),kstable['cum_event'],kstable['cum_nonevent']))
+
+    
+    kstable['%cum_event']=(kstable.events / data['target'].sum()).cumsum()
+    kstable['%cum_nonevent']=(kstable.nonevents  / data['target0'].sum()).cumsum()
+    kstable['%cum_totalobs']=round(kstable['cum_totalobs']/kstable['total_obs'].sum(),3)
+
+
+    kstable['KS'] = np.round(kstable['%cum_event']-kstable['%cum_nonevent'], 3) * 100
+
+    
+    kstable.index = range(1,bucket_groups+1) 
+    kstable.index.rename('Decile', inplace=True)
+
+    kstable['true_pos'] = kstable['cum_event']
+    kstable['false_pos'] = kstable['cum_nonevent']
+
+    kstable['true_neg'] = list(map(lambda x : (kstable['nonevents'].sum())-x,kstable['false_pos']))
+    kstable['false_neg'] = list(map(lambda x : (kstable['events'].sum())-x,kstable['true_pos']))
+    kstable['Precision'] = list(map(lambda x,y : x/(x+y),kstable['true_pos'],kstable['false_pos']))
+    kstable['Recall'] = list(map(lambda x,y : x/(x+y),kstable['true_pos'],kstable['false_neg']))
+    
+    sample_rate = round(kstable['events'].sum() / kstable['total_obs'].sum(),6)
+    print(sample_rate)
+    kstable['lift'] = round(kstable['cum_event_rate']/sample_rate,2)
+
+    print(kstable.head(2))
+
+    
+    ks =  round(max(kstable['KS']),2)
+
+    print(" \n KS is " + str(ks)+"%"+ " at decile " +  str((kstable.index[kstable['KS']==max(kstable['KS'])][0])))
+
+    return(kstable)
+
+def precision_recall(kstable):
+    kstable['true_pos'] = kstable['cum_event']
+    kstable['false_pos'] = kstable['cum_nonevent']
+
+    kstable['true_neg'] = list(map(lambda x : (kstable['nonevents'].sum())-x,kstable['false_pos']))
+    kstable['false_neg'] = list(map(lambda x : (kstable['events'].sum())-x,kstable['true_pos']))
+    kstable['Precision'] = list(map(lambda x,y : x/(x+y),kstable['true_pos'],kstable['false_pos']))
+    kstable['Recall'] = list(map(lambda x,y : x/(x+y),kstable['true_pos'],kstable['false_neg']))
+    print(kstable)
+    return (kstable)
+
+
+def ks_base_forced_wamt(y,y_proba_list,polnum_list=[],amt_var_data=[],amt_var_name='TSA', groups=20):
+
+    data = pd.DataFrame()
+
+    data['target'] =y
+    data['prob'] =y_proba_list
+    data[amt_var_name]=amt_var_data
+    
+    target_amt =amt_var_name+'_target'
+    data[target_amt] = data[amt_var_name]* data['target']
+
+    data['target0'] = 1 - data['target'] 
+    
+    data['bucket'] = pd.qcut(data['prob'].rank(method='first'),groups,labels=False)
+    data['bucket']=data['bucket']+1
+    data['POLICY_NUMBER']=polnum_list
+    #data['bucket'] = pd.qcut(data['prob'],groups, duplicates='drop')
+    
+    data = data.sort_values(by="bucket", ascending=False).reset_index(drop = True)
+    
+    bucket_groups = len(pd.unique(data['bucket']))
+    
+    
+    grouped = data.groupby('bucket',as_index = False)
+
+    kstable = pd.DataFrame()
+    kstable['min_prob'] = grouped.min()['prob']
+    kstable['max_prob'] = grouped.max()['prob']
+    kstable['events']   = grouped.sum()['target']
+    kstable['nonevents'] = grouped.sum()['target0']
+    kstable[amt_var_name] = grouped.sum()[amt_var_name]
+    kstable[target_amt] = grouped.sum()[target_amt]
+    
+    print(kstable[0:2])
+    
+    
+    kstable = kstable.sort_values(by="min_prob", ascending=False).reset_index(drop = True)
+    
+    kstable['total_obs'] =kstable['events'] +kstable['nonevents']
+
+    kstable['event_rate'] = list(map(lambda x,y : x/(x+y),kstable['events'],kstable['nonevents']))
+    kstable['nonevent_rate'] = list(map(lambda x,y : y/(x+y),kstable['events'],kstable['nonevents']))
+    
+    kstable['%event'] = (kstable.events / data['target'].sum()) 
+    kstable['%nonevent'] = (kstable.nonevents / data['target0'].sum())
+    kstable['%total_obs'] = kstable['total_obs'].map(lambda x: round(x/kstable['total_obs'].sum(),3))
+    
+    kstable['cum_event']= (kstable.events).cumsum()
+    kstable['cum_nonevent']=(kstable.nonevents).cumsum()
+    kstable['cum_totalobs']=(kstable.total_obs).cumsum()
+
+    kstable['cum_event_rate'] = list(map(lambda x,y : x/(x+y),kstable['cum_event'],kstable['cum_nonevent']))
+
+    # kstable['total_obs'].sum()
+    kstable['%cum_event']=(kstable.events / data['target'].sum()).cumsum()
+    kstable['%cum_nonevent']=(kstable.nonevents  / data['target0'].sum()).cumsum()
+    kstable['%cum_totalobs']=round(kstable['cum_totalobs']/kstable['total_obs'].sum(),3)
+
+    kstable['KS'] = np.round(kstable['%cum_event']-kstable['%cum_nonevent'], 3) * 100
+
+    
+    # kstable.index = range(1,bucket_groups+1) 
+    kstable.index = [x for x in range(groups,0,-1)]
+    kstable.index.rename('Decile', inplace=True)
+
+    kstable['true_pos'] = kstable['cum_event']
+    kstable['false_pos'] = kstable['cum_nonevent']
+
+    kstable['true_neg'] = list(map(lambda x : (kstable['nonevents'].sum())-x,kstable['false_pos']))
+    kstable['false_neg'] = list(map(lambda x : (kstable['events'].sum())-x,kstable['true_pos']))
+    kstable['Precision'] = list(map(lambda x,y : x/(x+y),kstable['true_pos'],kstable['false_pos']))
+    kstable['Recall'] = list(map(lambda x,y : x/(x+y),kstable['true_pos'],kstable['false_neg']))
+    
+    sample_rate = round(kstable['events'].sum() / kstable['total_obs'].sum(),6)
+    print(sample_rate)
+    kstable['lift'] = round(kstable['cum_event_rate']/sample_rate,2)
+    
+    kstable['%'+amt_var_name]=(kstable[amt_var_name] / data[amt_var_name].sum())
+    kstable['%'+target_amt]=(kstable[target_amt] / data[target_amt].sum())
+    
+    kstable['%cum_'+amt_var_name]=(kstable[amt_var_name] / data[amt_var_name].sum()).cumsum()
+    kstable['%cum_'+target_amt]=(kstable[target_amt] / data[target_amt].sum()).cumsum()
+    
+    print(kstable.head(2))
+
+    ks =  round(max(kstable['KS']),2)
+
+    print(" \n KS is " + str(ks)+"%"+ " at decile " +  str((kstable.index[kstable['KS']==max(kstable['KS'])][0])))
+
+    return data,kstable
+    
+
+def ks_base_normal_wamt(y,y_proba_list,polnum_list=[],amt_var_data=[],amt_var_name='TSA', groups=20):
+
+    data = pd.DataFrame()
+
+    data['target'] =y
+    data['prob'] =y_proba_list
+    data[amt_var_name]=amt_var_data
+    
+    target_amt =amt_var_name+'_target'
+    data[target_amt] = data[amt_var_name]* data['target']
+
+    data['target0'] = 1 - data['target'] 
+    
+    #data['bucket'] = pd.qcut(data['prob'].rank(method='first'),groups)
+    data['bucket'] = pd.qcut(data['prob'],groups,duplicates='drop',labels=False)
+    data['bucket']=data['bucket']+1
+    data['POLICY_NUMBER']=polnum_list
+    data = data.sort_values(by="bucket", ascending=False).reset_index(drop = True)
+
+
+    bucket_groups = len(pd.unique(data['bucket']))
+    
+    
+    grouped = data.groupby('bucket',as_index = False)
+
+    kstable = pd.DataFrame()
+    kstable['min_prob'] = grouped.min()['prob']
+    kstable['max_prob'] = grouped.max()['prob']
+    kstable['events']   = grouped.sum()['target']
+    kstable['nonevents'] = grouped.sum()['target0']
+    kstable[amt_var_name] = grouped.sum()[amt_var_name]
+    kstable[target_amt] = grouped.sum()[target_amt]
+
+    kstable = kstable.sort_values(by="min_prob", ascending=False).reset_index(drop = True)
+    
+    kstable['total_obs'] =kstable['events'] +kstable['nonevents']
+
+    kstable['event_rate'] = list(map(lambda x,y : x/(x+y),kstable['events'],kstable['nonevents']))
+    kstable['nonevent_rate'] = list(map(lambda x,y : y/(x+y),kstable['events'],kstable['nonevents']))
+    
+    kstable['%event'] = (kstable.events / data['target'].sum()) 
+    kstable['%nonevent'] = (kstable.nonevents / data['target0'].sum())
+    kstable['%total_obs'] = kstable['total_obs'].map(lambda x: round(x/kstable['total_obs'].sum(),3))
+    
+    kstable['cum_event']= (kstable.events).cumsum()
+    kstable['cum_nonevent']=(kstable.nonevents).cumsum()
+    kstable['cum_totalobs']=(kstable.total_obs).cumsum()
+
+    kstable['cum_event_rate'] = list(map(lambda x,y : x/(x+y),kstable['cum_event'],kstable['cum_nonevent']))
+
+    
+    kstable['%cum_event']=(kstable.events / data['target'].sum()).cumsum()
+    kstable['%cum_nonevent']=(kstable.nonevents  / data['target0'].sum()).cumsum()
+    kstable['%cum_totalobs']=round(kstable['cum_totalobs']/kstable['total_obs'].sum(),3)
+
+
+    kstable['KS'] = np.round(kstable['%cum_event']-kstable['%cum_nonevent'], 3) * 100
+
+    
+    kstable.index = [x for x in range(groups,0,-1)]
+
+    kstable.index.rename('Decile', inplace=True)
+
+    kstable['true_pos'] = kstable['cum_event']
+    kstable['false_pos'] = kstable['cum_nonevent']
+
+    kstable['true_neg'] = list(map(lambda x : (kstable['nonevents'].sum())-x,kstable['false_pos']))
+    kstable['false_neg'] = list(map(lambda x : (kstable['events'].sum())-x,kstable['true_pos']))
+    kstable['Precision'] = list(map(lambda x,y : x/(x+y),kstable['true_pos'],kstable['false_pos']))
+    kstable['Recall'] = list(map(lambda x,y : x/(x+y),kstable['true_pos'],kstable['false_neg']))
+    
+    sample_rate = round(kstable['events'].sum() / kstable['total_obs'].sum(),6)
+    print(sample_rate)
+    kstable['lift'] = round(kstable['cum_event_rate']/sample_rate,2)
+    
+    kstable['%'+amt_var_name]=(kstable[amt_var_name] / data[amt_var_name].sum())
+    kstable['%'+target_amt]=(kstable[target_amt] / data[target_amt].sum())
+    
+    kstable['%cum_'+amt_var_name]=(kstable[amt_var_name] / data[amt_var_name].sum()).cumsum()
+    kstable['%cum_'+target_amt]=(kstable[target_amt] / data[target_amt].sum()).cumsum()
+
+    print(kstable.head(2))
+
+    
+    ks =  round(max(kstable['KS']),2)
+
+    print(" \n KS is " + str(ks)+"%"+ " at decile " +  str((kstable.index[kstable['KS']==max(kstable['KS'])][0])))
+
+    return data,kstable    
+
+
+
+# Interactive Bins
+# list(data_tr.columns)
+# Low Education 
+# # data_tr['EDUCATION_BAND'].value_counts(dropna=False)
+## Self Emp High SA 
+## Low Income | High Age 
+## Low Income High Sum Assured 
+## Agent Risky and Negative Location 
+
+## Is FTR with High Education 
+## Low Aff Score , High SA 
+## Negative Location FTR 
+
+# 'Agent_Risk_Cat',
+# data_tr['Agent_Risk_Cat'].value_counts(dropna=False)
+# data_tr['IsFTR'].value_counts(dropna=False)
+# data_tr['neg_loc_only_four'].value_counts(dropna=False)
+# data_tr['AGENT_VINTAGE'].value_counts(dropna=False)
+# data_tr['Income type'].value_counts(dropna=False)    
+
+def lehg(row):
+    if row['EDUCATION_BAND_M'] <=1  and row['AGE'] >=45:
+        return 1
+    else:
+        return 0 
+    
+# -	Low Edu  & Low Income 
+def leli(row):
+    if row['EDUCATION_BAND_M'] <=1 and row['OWNER_ANNUAL_INCOME'] <=750000.0:
+        return 1
+    else:
+        return 0 
+    
+# -	Low Age High SA   
+
+def lahsa(row):
+    if row['AGE'] <=30  and row['SA_BASIC'] >10000000.0:
+        return 1
+    else:
+        return 0 
+
+def sehsa(row):
+    if row['EMPLOYMENT_BAND_M'] <=0  and row['SA_BASIC'] >10000000.0:
+        return 1
+    else:
+        return 0 
+    
+def liha(row):
+    
+    if row['OWNER_ANNUAL_INCOME'] <=750000.0  and row['AGE'] >=45:
+        return 1
+    else:
+        return 0    
+    
+def lihsa(row):
+    
+    if row['OWNER_ANNUAL_INCOME'] <=750000.0  and row['SA_COMBINED'] >10000000.0:
+        return 1
+    else:
+        return 0      
+
+def agent_loc_neg(row):
+    
+    if row['Agent_Risk_Cat'] !='No-Risk'  and  row['neg_loc_only_four']==1:
+        return 1
+    else:
+        return 0  
+    
+    
+def ftr_high_ed(row):
+    
+    if row['EDUCATION_BAND_M'] > 1 and row["IsFTR"]=="N":
+        return 1
+    else:
+        return 0    
+    
+# # -	Low Aff Score , High SA     
+
+def low_aff_high_sa(row):
+    
+    if row['AFF_SCORE'] in ['-1','1'] and row['SA_BASIC'] >10000000.0:
+        return 1
+    else:
+        return 0    
+
+def is_ftr_neg_loc(row):
+    
+    if row["IsFTR"]=="N" and row['neg_loc_only_four']==1:
+        return 1
+    else:
+        return 0         
+
+# Bayes Search 
+
+def my_target_recall_calc(y,y_pred):
+    
+    groups=20
+    data = pd.DataFrame()
+    data['target'] =y.tolist()
+    data['prob'] =y_pred.tolist()
+    data['target0'] = 1 - data['target'] 
+    
+    #data['bucket'] = pd.qcut(data['prob'].rank(method='first'),groups)
+    data['bucket'] = pd.qcut(data['prob'],groups, duplicates='drop')    
+    bucket_groups = len(pd.unique(data['bucket']))
+    grouped = data.groupby('bucket',as_index = False)
+    
+    kstable = pd.DataFrame()
+    kstable['min_prob'] = grouped.min()['prob']
+    kstable['max_prob'] = grouped.max()['prob']
+    kstable['events']   = grouped.sum()['target']
+    kstable['nonevents'] = grouped.sum()['target0']
+
+    kstable = kstable.sort_values(by="min_prob", ascending=False).reset_index(drop = True)
+    
+    kstable['total_obs'] =kstable['events'] +kstable['nonevents']
+
+    kstable['event_rate'] = list(map(lambda x,y : x/(x+y),kstable['events'],kstable['nonevents']))
+    kstable['nonevent_rate'] = list(map(lambda x,y : y/(x+y),kstable['events'],kstable['nonevents']))
+    
+    kstable['%event'] = (kstable.events / data['target'].sum()) 
+    kstable['%nonevent'] = (kstable.nonevents / data['target0'].sum())
+    kstable['%total_obs'] = kstable['total_obs'].map(lambda x: round(x/kstable['total_obs'].sum(),3))
+    
+    kstable['cum_event']= (kstable.events).cumsum()
+    kstable['cum_nonevent']=(kstable.nonevents).cumsum()
+    kstable['cum_totalobs']=(kstable.total_obs).cumsum()
+
+    kstable['cum_event_rate'] = list(map(lambda x,y : x/(x+y),kstable['cum_event'],kstable['cum_nonevent']))
+
+    
+    kstable['%cum_event']=(kstable.events / data['target'].sum()).cumsum()
+    kstable['%cum_nonevent']=(kstable.nonevents  / data['target0'].sum()).cumsum()
+    kstable['%cum_totalobs']=round(kstable['cum_totalobs']/kstable['total_obs'].sum(),3)
+
+
+    kstable['KS'] = np.round(kstable['%cum_event']-kstable['%cum_nonevent'], 3) * 100
+
+    
+    kstable.index = range(1,bucket_groups+1) 
+    kstable.index.rename('Decile', inplace=True)
+
+    kstable['true_pos'] = kstable['cum_event']
+    kstable['false_pos'] = kstable['cum_nonevent']
+
+    kstable['true_neg'] = list(map(lambda x : (kstable['nonevents'].sum())-x,kstable['false_pos']))
+    kstable['false_neg'] = list(map(lambda x : (kstable['events'].sum())-x,kstable['true_pos']))
+    kstable['Precision'] = list(map(lambda x,y : x/(x+y),kstable['true_pos'],kstable['false_pos']))
+    kstable['Recall'] = list(map(lambda x,y : x/(x+y),kstable['true_pos'],kstable['false_neg']))
+    
+    sample_rate = round(kstable['events'].sum() / kstable['total_obs'].sum(),6)
+    
+    kstable['lift'] = round(kstable['cum_event_rate']/sample_rate,2)
+     
+    kstable['true_pos'] = kstable['cum_event']
+    kstable['false_pos'] = kstable['cum_nonevent']
+
+    kstable['true_neg'] = list(map(lambda x : (kstable['nonevents'].sum())-x,kstable['false_pos']))
+    kstable['false_neg'] = list(map(lambda x : (kstable['events'].sum())-x,kstable['true_pos']))
+    kstable['Precision'] = list(map(lambda x,y : x/(x+y),kstable['true_pos'],kstable['false_pos']))
+    kstable['Recall'] = list(map(lambda x,y : x/(x+y),kstable['true_pos'],kstable['false_neg']))    
+
+    return kstable['Recall'].tolist()[0]
+
+
+def bucket_maker(x,input_df):
+    
+    min_prob_list = input_df['min_prob'].tolist()
+    max_prob_list = [1.0]+input_df['min_prob'].tolist()[0:-1]
+    min_prob_list[-1]=0.0
+    bucket_list = input_df.index.tolist()
+    
+    for  i, (f,s) in enumerate(zip(min_prob_list,max_prob_list)):
+        if x['prob'] > f and x['prob'] <=s:
+            return bucket_list[i]
+        elif x['prob'] == 0:
+            return bucket_list[-1]
+            
+
+
+def ks_base_val_wamt(y,y_proba_list,model_data=None,polnum_list=[],amt_var_data=[],vars_to_add=[],input_df=None,amt_var_name='TSA', groups=20):
+
+    data = pd.DataFrame()
+
+    data['target'] =y
+    data['prob'] =y_proba_list
+    data[amt_var_name]=amt_var_data
+    
+    target_amt =amt_var_name+'_target'
+    data[target_amt] = data[amt_var_name]* data['target']
+
+    data['target0'] = 1 - data['target'] 
+    
+    #data['bucket'] = pd.qcut(data['prob'].rank(method='first'),groups)
+    #data['bucket'] = pd.qcut(data['prob'],groups,duplicates='drop',labels=False)
+    data['bucket']=data.apply(lambda row : bucket_maker(row,input_df), axis=1 )
+    
+    
+    data['POLICY_NUMBER']=polnum_list
+    for item in vars_to_add:
+        data[item]=model_data[item].tolist()
+        
+    data = data.sort_values(by="bucket", ascending=False).reset_index(drop = True)
+
+
+    bucket_groups = len(pd.unique(data['bucket']))
+    
+    
+    grouped = data.groupby('bucket',as_index = False)
+
+    kstable = pd.DataFrame()
+    kstable['min_prob'] = grouped.min()['prob']
+    kstable['max_prob'] = grouped.max()['prob']
+    kstable['events']   = grouped.sum()['target']
+    kstable['nonevents'] = grouped.sum()['target0']
+    kstable[amt_var_name] = grouped.sum()[amt_var_name]
+    kstable[target_amt] = grouped.sum()[target_amt]
+
+    kstable = kstable.sort_values(by="min_prob", ascending=False).reset_index(drop = True)
+    
+    kstable['total_obs'] =kstable['events'] +kstable['nonevents']
+
+    kstable['event_rate'] = list(map(lambda x,y : x/(x+y),kstable['events'],kstable['nonevents']))
+    kstable['nonevent_rate'] = list(map(lambda x,y : y/(x+y),kstable['events'],kstable['nonevents']))
+    
+    kstable['%event'] = (kstable.events / data['target'].sum()) 
+    kstable['%nonevent'] = (kstable.nonevents / data['target0'].sum())
+    kstable['%total_obs'] = kstable['total_obs'].map(lambda x: round(x/kstable['total_obs'].sum(),3))
+    
+    kstable['cum_event']= (kstable.events).cumsum()
+    kstable['cum_nonevent']=(kstable.nonevents).cumsum()
+    kstable['cum_totalobs']=(kstable.total_obs).cumsum()
+
+    kstable['cum_event_rate'] = list(map(lambda x,y : x/(x+y),kstable['cum_event'],kstable['cum_nonevent']))
+
+    
+    kstable['%cum_event']=(kstable.events / data['target'].sum()).cumsum()
+    kstable['%cum_nonevent']=(kstable.nonevents  / data['target0'].sum()).cumsum()
+    kstable['%cum_totalobs']=round(kstable['cum_totalobs']/kstable['total_obs'].sum(),3)
+
+
+    kstable['KS'] = np.round(kstable['%cum_event']-kstable['%cum_nonevent'], 3) * 100
+
+    
+    kstable.index = sorted(data['bucket'].unique().tolist(), reverse=True)
+
+    kstable.index.rename('Decile', inplace=True)
+
+    kstable['true_pos'] = kstable['cum_event']
+    kstable['false_pos'] = kstable['cum_nonevent']
+
+    kstable['true_neg'] = list(map(lambda x : (kstable['nonevents'].sum())-x,kstable['false_pos']))
+    kstable['false_neg'] = list(map(lambda x : (kstable['events'].sum())-x,kstable['true_pos']))
+    kstable['Precision'] = list(map(lambda x,y : x/(x+y),kstable['true_pos'],kstable['false_pos']))
+    kstable['Recall'] = list(map(lambda x,y : x/(x+y),kstable['true_pos'],kstable['false_neg']))
+    
+    sample_rate = round(kstable['events'].sum() / kstable['total_obs'].sum(),6)
+    print(sample_rate)
+    kstable['lift'] = round(kstable['cum_event_rate']/sample_rate,2)
+    
+    kstable['%'+amt_var_name]=(kstable[amt_var_name] / data[amt_var_name].sum())
+    kstable['%'+target_amt]=(kstable[target_amt] / data[target_amt].sum())
+    
+    kstable['%cum_'+amt_var_name]=(kstable[amt_var_name] / data[amt_var_name].sum()).cumsum()
+    kstable['%cum_'+target_amt]=(kstable[target_amt] / data[target_amt].sum()).cumsum()
+
+    print(kstable.head(2))
+
+    
+    ks =  round(max(kstable['KS']),2)
+
+    print(" \n KS is " + str(ks)+"%"+ " at decile " +  str((kstable.index[kstable['KS']==max(kstable['KS'])][0])))
+
+    return data,kstable   
